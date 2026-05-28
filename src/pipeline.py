@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 import os
 import io
 import time
@@ -729,3 +732,75 @@ def run_pipeline():
 if __name__ == "__main__":
 
     run_pipeline()
+
+print("\n========== CORRELATION WITH OUTBREAK ==========\n")
+
+outbreak_corr = correlation_matrix['Outbreak'].sort_values(
+    ascending=False
+)
+
+print(outbreak_corr)
+
+plt.figure(figsize=(18, 12))
+sns.heatmap(
+    correlation_matrix,
+    annot=True,
+    cmap='coolwarm',
+    fmt='.2f',
+    linewidths=0.5
+)
+plt.title(
+    "Advanced Feature Correlation Heatmap",
+    fontsize=18
+)
+
+plt.xticks(rotation=45)
+
+plt.yticks(rotation=0)
+
+plt.tight_layout()
+
+plt.show()
+
+print("\n========== HIGH FEATURE CORRELATIONS ==========\n")
+threshold = 0.75
+for i in range(len(correlation_matrix.columns)):
+
+    for j in range(i):
+
+        corr_value = correlation_matrix.iloc[i, j]
+
+        if abs(corr_value) > threshold:
+
+            col1 = correlation_matrix.columns[i]
+
+            col2 = correlation_matrix.columns[j]
+
+            print(
+                f"{col1} <--> {col2} = {corr_value:.2f}"
+            )
+
+outbreak_corr = outbreak_corr.drop('Outbreak')
+plt.figure(figsize=(12, 8))
+sns.barplot(
+    x=outbreak_corr.values,
+    y=outbreak_corr.index
+)
+plt.title(
+    "Feature Correlation with Outbreak",
+    fontsize=16
+)
+
+plt.xlabel("Correlation Strength")
+
+plt.ylabel("Features")
+
+plt.tight_layout()
+
+plt.show()
+
+strong_features = outbreak_corr[
+    abs(outbreak_corr) > 0.30
+]
+
+print(strong_features)

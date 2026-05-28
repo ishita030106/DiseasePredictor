@@ -1,20 +1,26 @@
+# evaluate_models.py
+
+# ============================================================
+# IMPORTS
+# ============================================================
+
 import pandas as pd
-import joblib
 
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    classification_report,
+    confusion_matrix
+)
 
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-
-from sklearn.ensemble import VotingClassifier
-from sklearn.ensemble import StackingClassifier
-
-from sklearn.linear_model import LogisticRegression
+from ensemble import (
+    soft_voting_ensemble,
+    weighted_voting_ensemble,
+    stacking_ensemble
+)
 
 from train_rf import train_random_forest
 from train_xgb import train_xgboost
@@ -22,188 +28,246 @@ from train_lr import train_logistic_regression
 from train_svm import train_svm
 
 
-# -----------------------------------
-# Load Dataset
-# -----------------------------------
-
-data = load_breast_cancer()
-
-X = pd.DataFrame(data.data, columns=data.feature_names)
-y = pd.Series(data.target)
-
-# -----------------------------------
-# Train Test Split
-# -----------------------------------
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.2,
-    random_state=42
-)
-
-# -----------------------------------
-# Evaluation Function
-# -----------------------------------
-
-def evaluate_model(model, X_test, y_test, model_name):
-
-    predictions = model.predict(X_test)
-
-    accuracy = accuracy_score(y_test, predictions)
-    precision = precision_score(y_test, predictions)
-    recall = recall_score(y_test, predictions)
-    f1 = f1_score(y_test, predictions)
-
-    print(f"\n{'='*50}")
-    print(f"{model_name} Performance")
-    print(f"{'='*50}")
-
-    print("Accuracy :", accuracy)
-    print("Precision:", precision)
-    print("Recall   :", recall)
-    print("F1 Score :", f1)
-
-    print("\nClassification Report:")
-    print(classification_report(y_test, predictions))
-
-    print("Confusion Matrix:")
-    print(confusion_matrix(y_test, predictions))
+# ============================================================
+# EVALUATION FUNCTION
+# ============================================================
 
 
-# -----------------------------------
-# Train Individual Models
-# -----------------------------------
+def evaluate_model(model_name, model, X_test, y_test):
 
-rf_model = train_random_forest(X_train, y_train)
+    print(f"\n{'=' * 50}")
+    print(f"EVALUATING : {model_name}")
+    print(f"{'=' * 50}\n")
 
-xgb_model = train_xgboost(X_train, y_train)
+    # ========================================================
+    # PREDICTIONS
+    # ========================================================
 
-lr_model = train_logistic_regression(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-svm_model = train_svm(X_train, y_train)
+    # ========================================================
+    # PROBABILITIES
+    # ========================================================
 
-# -----------------------------------
-# Evaluate Individual Models
-# -----------------------------------
+    if hasattr(model, 'predict_proba'):
+        y_prob = model.predict_proba(X_test)[:, 1]
+    else:
+        y_prob = None
 
-evaluate_model(
-    rf_model,
-    X_test,
-    y_test,
-    "Random Forest"
-)
+    # ========================================================
+    # METRICS
+    # ========================================================
 
-evaluate_model(
-    xgb_model,
-    X_test,
-    y_test,
-    "XGBoost"
-)
+    accuracy = accuracy_score(y_test, y_pred)
 
-evaluate_model(
-    lr_model,
-    X_test,
-    y_test,
-    "Logistic Regression"
-)
+    precision = precision_score(y_test, y_pred)
 
-evaluate_model(
-    svm_model,
-    X_test,
-    y_test,
-    "SVM"
-)
+    recall = recall_score(y_test, y_pred)
 
-# -----------------------------------
-# Voting Ensemble
-# -----------------------------------
+    f1 = f1_score(y_test, y_pred)
 
-voting_model = VotingClassifier(
-    estimators=[
-        ('rf', rf_model),
-        ('xgb', xgb_model),
-        ('lr', lr_model),
-        ('svm', svm_model)
-    ],
-    voting='hard'
-)
+    if y_prob is not None:
+        roc_auc = roc_auc_score(y_test, y_prob)
+    else:
+        roc_auc = 0
 
-# Train Voting Ensemble
-voting_model.fit(X_train, y_train)
+    # ========================================================
+    # PRINT RESULTS
+    # ========================================================
 
-# Evaluate Voting Ensemble
-evaluate_model(
-    voting_model,
-    X_test,
-    y_test,
-    "Voting Ensemble"
-)
+    print(f"Accuracy  : {accuracy:.4f}")
+    print(f"Precision : {precision:.4f}")
+    print(f"Recall    : {recall:.4f}")
+    print(f"F1 Score  : {f1:.4f}")
+    print(f"ROC-AUC   : {roc_auc:.4f}")
 
-# -----------------------------------
-# Stacking Ensemble
-# -----------------------------------
+    print("\nClassification Report:\n")
 
-stacking_model = StackingClassifier(
-    estimators=[
-        ('rf', rf_model),
-        ('xgb', xgb_model),
-        ('lr', lr_model),
-        ('svm', svm_model)
-    ],
-    final_estimator=LogisticRegression()
-)
+    print(classification_report(y_test, y_pred))
 
-# Train Stacking Ensemble
-stacking_model.fit(X_train, y_train)
+    print("\nConfusion Matrix:\n")
 
-# Evaluate Stacking Ensemble
-evaluate_model(
-    stacking_model,
-    X_test,
-    y_test,
-    "Stacking Ensemble"
-)
+    print(confusion_matrix(y_test, y_pred))
 
-# -----------------------------------
-# Compare Models
-# -----------------------------------
+    # ========================================================
+    # RETURN RESULTS
+    # ========================================================
 
-model_scores = {
-    "Random Forest": f1_score(y_test, rf_model.predict(X_test)),
-    "XGBoost": f1_score(y_test, xgb_model.predict(X_test)),
-    "Logistic Regression": f1_score(y_test, lr_model.predict(X_test)),
-    "SVM": f1_score(y_test, svm_model.predict(X_test)),
-    "Voting Ensemble": f1_score(y_test, voting_model.predict(X_test)),
-    "Stacking Ensemble": f1_score(y_test, stacking_model.predict(X_test))
-}
+    return {
+        'Model': model_name,
+        'Accuracy': accuracy,
+        'Precision': precision,
+        'Recall': recall,
+        'F1 Score': f1,
+        'ROC-AUC': roc_auc
+    }
 
-best_model = max(model_scores, key=model_scores.get)
 
-print("\nBest Performing Model:", best_model)
+# ============================================================
+# MAIN EVALUATION PIPELINE
+# ============================================================
 
-print("Best F1 Score:", model_scores[best_model])
 
-# -----------------------------------
-# Save Best Model
-# -----------------------------------
+def evaluate_all_models(X_train, X_test, y_train, y_test):
 
-if best_model == "Random Forest":
-    joblib.dump(rf_model, "best_model.pkl")
+    results = []
 
-elif best_model == "XGBoost":
-    joblib.dump(xgb_model, "best_model.pkl")
+    # ========================================================
+    # RANDOM FOREST
+    # ========================================================
 
-elif best_model == "Logistic Regression":
-    joblib.dump(lr_model, "best_model.pkl")
+    rf_model = train_random_forest(X_train, y_train)
 
-elif best_model == "SVM":
-    joblib.dump(svm_model, "best_model.pkl")
+    rf_result = evaluate_model(
+        "Random Forest",
+        rf_model,
+        X_test,
+        y_test
+    )
 
-elif best_model == "Voting Ensemble":
-    joblib.dump(voting_model, "best_model.pkl")
+    results.append(rf_result)
 
-else:
-    joblib.dump(stacking_model, "best_model.pkl")
+    # ========================================================
+    # XGBOOST
+    # ========================================================
 
-print("\nBest model saved successfully!")
+    xgb_model = train_xgboost(X_train, y_train)
+
+    xgb_result = evaluate_model(
+        "XGBoost",
+        xgb_model,
+        X_test,
+        y_test
+    )
+
+    results.append(xgb_result)
+
+    # ========================================================
+    # LOGISTIC REGRESSION
+    # ========================================================
+
+    lr_model = train_logistic_regression(X_train, y_train)
+
+    lr_result = evaluate_model(
+        "Logistic Regression",
+        lr_model,
+        X_test,
+        y_test
+    )
+
+    results.append(lr_result)
+
+    # ========================================================
+    # SVM
+    # ========================================================
+
+    svm_model = train_svm(X_train, y_train)
+
+    svm_result = evaluate_model(
+        "SVM",
+        svm_model,
+        X_test,
+        y_test
+    )
+
+    results.append(svm_result)
+
+    # ========================================================
+    # SOFT VOTING ENSEMBLE
+    # ========================================================
+
+    soft_model = soft_voting_ensemble(
+        X_train,
+        X_test,
+        y_train,
+        y_test
+    )
+
+    soft_result = evaluate_model(
+        "Soft Voting Ensemble",
+        soft_model,
+        X_test,
+        y_test
+    )
+
+    results.append(soft_result)
+
+    # ========================================================
+    # WEIGHTED VOTING ENSEMBLE
+    # ========================================================
+
+    weighted_model = weighted_voting_ensemble(
+        X_train,
+        X_test,
+        y_train,
+        y_test
+    )
+
+    weighted_result = evaluate_model(
+        "Weighted Voting Ensemble",
+        weighted_model,
+        X_test,
+        y_test
+    )
+
+    results.append(weighted_result)
+
+    # ========================================================
+    # STACKING ENSEMBLE
+    # ========================================================
+
+    stacking_model = stacking_ensemble(
+        X_train,
+        X_test,
+        y_train,
+        y_test
+    )
+
+    stacking_result = evaluate_model(
+        "Stacking Ensemble",
+        stacking_model,
+        X_test,
+        y_test
+    )
+
+    results.append(stacking_result)
+
+    # ========================================================
+    # CREATE RESULTS TABLE
+    # ========================================================
+
+    results_df = pd.DataFrame(results)
+
+    # ========================================================
+    # SORT BY F1 SCORE
+    # ========================================================
+
+    results_df = results_df.sort_values(
+        by='F1 Score',
+        ascending=False
+    )
+
+    # ========================================================
+    # DISPLAY RESULTS
+    # ========================================================
+
+    print("\n")
+    print("=" * 80)
+    print("FINAL MODEL COMPARISON")
+    print("=" * 80)
+
+    print(results_df)
+
+    # ========================================================
+    # SAVE RESULTS
+    # ========================================================
+
+    results_df.to_csv(
+        'model_comparison_results.csv',
+        index=False
+    )
+
+    print("\nResults saved as model_comparison_results.csv")
+
+    return results_df
+
