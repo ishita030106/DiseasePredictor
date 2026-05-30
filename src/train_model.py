@@ -1,45 +1,183 @@
-# Setting up tools
+from sklearn.ensemble import (
+    RandomForestClassifier,
+    ExtraTreesClassifier,
+    GradientBoostingClassifier,
+    VotingClassifier
+)
+
+from xgboost import XGBClassifier
+
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    classification_report
+)
+from sklearn.model_selection import train_test_split
+
 import pandas as pd
-from sklearn.model_selection import train_test_split # ML Library
-from sklearn.ensemble import RandomForestClassifier
-import joblib #To save trained python object, Flask API will load it later
-import os
-from db_config import get_database_client
-os.makedirs('backend/models',exist_ok=True)
+import matplotlib.pyplot as plt
+import joblib
+# Training Models
 
-# Ingesting Data
-db=get_database_client()
-collection=db['fused_outbreak_data']
-cursor = collection.find({},{'_id':0})
-data=pd.DataFrame(list(cursor))
-if data.empty:
-    print('Database is empty. Execute pipeline.py first.')
-    exit(1)
+rf_model = RandomForestClassifier(
+    n_estimators=200,
+    max_depth=10,
+    random_state=42
+)
 
-# Creating the answer key for supervised learning
-data['Reported_Cases']=pd.to_numeric(data['Reported_Cases'],errors='coerce').fillna(0)
-def assign_risk(cases):
-    if cases > 150: return 'High'
-    if cases > 50: return 'Medium'
-    return 'Low'
-data['Risk_Level']=data['Reported_Cases'].apply(assign_risk)
+xgb_model = XGBClassifier(
+    eval_metric='mlogloss',
+    random_state=42
+)
 
-# Splitting Inputs and Outputs
-X = data[['Avg_Temperature_2m','Avg_Relative_Humidity_2m','Search_Trend_Score']] # This is Feature, Frontend will send to backend
-y=data['Risk_Level'] # This is Target, answer which we want the model to predict
+et_model = ExtraTreesClassifier(
+    n_estimators=200,
+    random_state=42
+)
 
-# Splitting the data for training and testing
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-#random_state=42 is to make sure data is shuffled the same way every time the script is run
+gb_model = GradientBoostingClassifier(
+    random_state=42
+)
 
-# Training the brain
-model=RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42) 
-#n_estimators to define how many t]decision trees at a time
-#max_depth to allow each decision tree to ask 10 y/n questions before making decision
-model.fit(X_train,y_train)
-#Algo. looks at input output and adjusts internal math to figure out correlations
-#Testing
-accuracy=model.score(X_test,y_test)
-print(f"Model Training Complete. Validation Accuracy: {accuracy*100:.2f}%")
-joblib.dump(model,'backend/models/baseline_model.pkl')
-#This file will be loaded by Flask API to serve live predictions
+voting_model = VotingClassifier(
+    estimators=[
+        ('rf', rf_model),
+        ('xgb', xgb_model),
+        ('et', et_model)
+    ],
+    voting='soft'
+)
+
+models = {
+    "Random Forest": rf_model,
+    "XGBoost": xgb_model,
+    "Extra Trees": et_model,
+    "Gradient Boosting": gb_model,
+    "Voting Ensemble": voting_model
+}
+
+results = []
+
+best_accuracy = 0
+best_model = None
+best_model_name = ""
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+for name, model in models.items():
+
+    
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, y_pred)
+
+    precision = precision_score(
+        y_test,
+        y_pred,
+        average='weighted',
+        zero_division=0
+    )
+
+    recall = recall_score(
+        y_test,
+        y_pred,
+        average='weighted',
+        zero_division=0
+    )
+
+    f1 = f1_score(
+        y_test,
+        y_pred,
+        average='weighted',
+        zero_division=0
+    )
+
+    results.append([
+        name,
+        accuracy,
+        precision,
+        recall,
+        f1
+    ])
+
+    if accuracy > best_accuracy:
+        best_accuracy = accuracy
+        best_model = model
+        best_model_name = name
+
+    print(f"\n{name}")
+    print(
+        classification_report(
+            y_test,
+            y_pred,
+            zero_division=0
+        )
+    )
+
+comparison_df = pd.DataFrame(
+    results,
+    columns=[
+        "Model",
+        "Accuracy",
+        "Precision",
+        "Recall",
+        "F1 Score"
+    ]
+)
+
+print("\nMODEL COMPARISON")
+print(comparison_df)
+
+print(f"\nBEST MODEL: {best_model_name}")
+print(f"BEST ACCURACY: {best_accuracy:.4f}")
+
+# Save best model
+joblib.dump(
+    best_model,
+    'backend/models/disease_predictor.pkl'
+)
+
+data = pd.read_csv("your_dataset.csv")
+X = data['temperature',
+    'humidity',
+    'rainfall']
+
+
+
+# Feature Importance
+if hasattr(rf_model, "feature_importances_"):
+
+    feature_importance = pd.DataFrame({
+        'Feature': X.columns,
+        'Importance': rf_model.feature_importances_
+    })
+
+    feature_importance = feature_importance.sort_values(
+        by='Importance',
+        ascending=False
+    )
+
+    print("\nFEATURE IMPORTANCE")
+    print(feature_importance)
+
+    plt.figure(figsize=(10, 5))
+
+    plt.bar(
+        feature_importance['Feature'],
+        feature_importance['Importance']
+    )
+
+    plt.xticks(rotation=45)
+
+    plt.tight_layout()
+
+    plt.show()
