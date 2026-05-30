@@ -131,9 +131,83 @@ def run_etl_pipeline():
     final_dataset.sort_values(by=['Region', 'Year', 'Week_Num'], inplace=True, ascending=True)
 
     print("⚙️ Engineering Time-Lag Features...")
-    final_dataset['Cases_Last_Week'] = final_dataset.groupby('Region')['Reported_Cases'].shift(1)
-    final_dataset['Rainfall_Lag_1'] = final_dataset.groupby('Region')['Rainfall'].shift(1)
-    final_dataset['Temp_Humidity_Index'] = final_dataset['Avg_Temperature_2m'] * final_dataset['Avg_Relative_Humidity_2m']
+
+    # Existing Features
+    final_dataset['Cases_Last_Week'] = (
+    final_dataset.groupby('Region')['Reported_Cases']
+    .shift(1)
+)
+    final_dataset['Cases_MA_2'] = (
+    final_dataset.groupby('Region')['Reported_Cases']
+    .transform(lambda x: x.rolling(2).mean())
+    )
+
+    final_dataset['Cases_MA_4'] = (
+    final_dataset.groupby('Region')['Reported_Cases']
+    .transform(lambda x: x.rolling(4).mean())
+    )
+
+    final_dataset['Disease_Growth_Rate'] = (
+    (
+        final_dataset['Reported_Cases']
+        - final_dataset['Cases_Last_Week']
+    )
+    /
+    (
+        final_dataset['Cases_Last_Week']
+        + 1
+    )
+    )
+
+    final_dataset['Rainfall_Lag_1'] = (
+    final_dataset.groupby('Region')['Rainfall']
+    .shift(1)
+    )
+
+    final_dataset['Temp_Humidity_Index'] = (
+        final_dataset['Avg_Temperature_2m']
+        * final_dataset['Avg_Relative_Humidity_2m']
+    )
+
+    # New Feature 1
+    final_dataset['Rainfall_Change'] = (
+        final_dataset['Rainfall']
+        - final_dataset['Rainfall_Lag_1']
+    )
+
+    # New Feature 2
+    final_dataset['Temp_Lag_1'] = (
+        final_dataset.groupby('Region')['Avg_Temperature_2m']
+        .shift(1)
+    )
+
+    final_dataset['Temperature_Change'] = (
+        final_dataset['Avg_Temperature_2m']
+        - final_dataset['Temp_Lag_1']
+    )
+
+    # New Feature 3
+    final_dataset['Humidity_Lag_1'] = (
+        final_dataset.groupby('Region')['Avg_Relative_Humidity_2m']
+        .shift(1)
+    )
+
+    final_dataset['Humidity_Change'] = (
+        final_dataset['Avg_Relative_Humidity_2m']
+        - final_dataset['Humidity_Lag_1']
+    )
+
+    # New Feature 4
+    final_dataset['Search_Trend_Lag_1'] = (
+        final_dataset.groupby('Region')['Search_Trend_Score']
+        .shift(1)
+    )
+
+    final_dataset['Search_Trend_Momentum'] = (
+        final_dataset['Search_Trend_Score']
+        - final_dataset['Search_Trend_Lag_1']
+    )
+
     final_dataset.dropna(inplace=True)
 
     print("💾 Syncing data straight to training repository...")
