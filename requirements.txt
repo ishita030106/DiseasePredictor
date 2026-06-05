@@ -6,5 +6,5 @@ joblib
 numpy
 pymongo
 PyJWT
-
+imbalanced-learn
 

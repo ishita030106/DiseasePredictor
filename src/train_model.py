@@ -2,7 +2,10 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+from imblearn.over_sampling import SMOTE
 from sklearn.model_selection import train_test_split # ML Library
+from sklearn.metrics import confusion_matrix
 
 from sklearn.ensemble import (
     RandomForestClassifier,
@@ -17,11 +20,13 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
-    classification_report
+    classification_report,
+    confusion_matrix
 )
 import joblib #To save trained python object, Flask API will load it later
 import os
 from db_config import get_database_client
+import json
 os.makedirs('backend/models',exist_ok=True)
 
 # Ingesting Data
@@ -76,6 +81,12 @@ y=data['Risk_Level'] # This is Target, answer which we want the model to predict
 
 # Splitting the data for training and testing
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+smote = SMOTE(random_state=42)
+
+X_train, y_train = smote.fit_resample(
+    X_train,
+    y_train
+)
 #random_state=42 is to make sure data is shuffled the same way every time the script is run
 
 # Training the brain
@@ -116,12 +127,20 @@ for name, model in models.items():
 
     y_pred = model.predict(X_test)
 
+
+
+    cm = confusion_matrix(y_test, y_pred)
+
+    print(f"\n{name} Confusion Matrix")
+    print(cm)
+
     accuracy = accuracy_score(y_test, y_pred)
 
     precision = precision_score(
-        y_test,
-        y_pred,
-        average='weighted'
+    y_test,
+    y_pred,
+    average='weighted',
+    zero_division=0
     )
 
     recall = recall_score(
@@ -148,7 +167,8 @@ for name, model in models.items():
     print(classification_report(
         y_test,
         y_pred,
-        target_names=['Low','Medium','High']
+        target_names=['Low','Medium','High'],
+        zero_division = 0
     ))
 
 comparison_df = pd.DataFrame(
@@ -164,6 +184,13 @@ comparison_df = pd.DataFrame(
 
 print("\nMODEL COMPARISON")
 print(comparison_df)
+best_model_name = comparison_df.sort_values(
+    by="F1 Score",
+    ascending=False
+).iloc[0]["Model"]
+
+print(f"\nBest Model: {best_model_name}")
+
 best_model = voting_model
 feature_importance = pd.DataFrame({
     'Feature': X.columns,
